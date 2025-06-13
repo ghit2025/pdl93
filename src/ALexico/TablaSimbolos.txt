@@ -1,0 +1,37 @@
+TABLA PRINCIPAL #1:
+* LEXEMA : 'suma'
+  + tipo : 'funcion'
+  + categoria : 'funcion'
+  + numParam : 2
+  + TipoRetorno : 'int'
+  + despl : 3
+* LEXEMA : 'msg'
+  + tipo : 'string'
+  + categoria : 'variable'
+  + despl : 8
+* LEXEMA : 'a'
+  + tipo : 'int'
+  + categoria : 'variable'
+  + despl : 4
+* LEXEMA : 'b'
+  + tipo : 'int'
+  + categoria : 'variable'
+  + despl : 5
+* LEXEMA : 'resultado'
+  + tipo : 'int'
+  + categoria : 'variable'
+  + despl : 6
+* LEXEMA : 'x'
+  + tipo : 'int'
+  + categoria : 'variable'
+  + despl : 1
+* LEXEMA : 'mensaje'
+  + tipo : 'string'
+  + categoria : 'variable'
+  + despl : 2
+* LEXEMA : 'imprimirMensaje'
+  + tipo : 'funcion'
+  + categoria : 'funcion'
+  + numParam : 1
+  + TipoRetorno : 'void'
+  + despl : 7
