@@ -1,18 +1,24 @@
 package AnSintDesRec;
 
 import ALexico.AnLexico;
-import java.util.HashMap;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.Map;
 
 public class AnSemantico {
-    private Map<String, Map<String, Object>> tablaSimbolos; // Referencia a la tabla del léxico
+    private TablaSimbolos tablaSimbolos;
+    private Map<String, Map<String, Object>> tablaLexico; // tabla original del léxico para desplazamientos
     private AnLexico lexico;
+    private String funcionActual;
+    private StringBuilder dumpLocales = new StringBuilder();
 
     // Constructor que recibe la tabla de símbolos ya creada por el léxico
-    public AnSemantico(AnLexico lexico, Map<String, Map<String, Object>> tablaSimbolosExistente) {
+    public AnSemantico(AnLexico lexico, Map<String, Map<String, Object>> tablaLexico) {
         this.lexico = lexico;
-        this.tablaSimbolos = tablaSimbolosExistente; // ✅ Usa la tabla existente del léxico
-
+        this.tablaLexico = tablaLexico;
+        this.tablaSimbolos = new TablaSimbolos();
+        this.funcionActual = null;
     }
 
     // ==================== FUNCIONES PRINCIPALES SEGÚN PDF SEMÁNTICO ====================
@@ -22,17 +28,12 @@ public class AnSemantico {
      * Función obligatoria según el PDF de análisis semántico
      */
     public void anadeTipoTS(String lexema, String tipo) {
-        if (!tablaSimbolos.containsKey(lexema)) {
-            // ✅ Si no existe, crear entrada nueva
-            Map<String, Object> atributos = new HashMap<>();
-            atributos.put("tipo", tipo);
-            tablaSimbolos.put(lexema, atributos);
-        } else {
-            // ✅ Si existe (del léxico), solo añadir el tipo
-            Map<String, Object> atributos = tablaSimbolos.get(lexema);
-            atributos.put("tipo", tipo);
-            tablaSimbolos.put(lexema, atributos);
+        EntradaTS e = tablaSimbolos.buscar(funcionActual, lexema);
+        if (e == null) {
+            e = new EntradaTS();
+            tablaSimbolos.insertar(funcionActual, lexema, e);
         }
+        e.put("tipo", tipo);
     }
 
 
@@ -41,13 +42,12 @@ public class AnSemantico {
      * Función obligatoria según el PDF de análisis semántico
      */
     public String buscaTipoTS(String lexema) {
-        if (!tablaSimbolos.containsKey(lexema)) {
-            throw new RuntimeException("Error semántico: Variable '" + lexema +
-                    "' no declarada en la línea " + lexico.getLinea());
+        EntradaTS e = tablaSimbolos.buscar(funcionActual, lexema);
+        if (e == null) {
+            throw new RuntimeException("Error semántico: Variable '" + lexema + "' no declarada en la línea " + lexico.getLinea());
         }
 
-        Map<String, Object> atributos = tablaSimbolos.get(lexema);
-        String tipo = (String) atributos.get("tipo");
+        String tipo = (String) e.get("tipo");
 
         if (tipo == null) {
             throw new RuntimeException("Error semántico: Variable '" + lexema +
@@ -61,28 +61,24 @@ public class AnSemantico {
      * Añade el desplazamiento de un identificador (ya implementado en léxico, pero por completitud)
      */
     public void anadeDesplTS(String lexema, int despl) {
-        if (!tablaSimbolos.containsKey(lexema)) {
-            Map<String, Object> atributos = new HashMap<>();
-            atributos.put("despl", despl);
-            tablaSimbolos.put(lexema, atributos);
-        } else {
-            Map<String, Object> atributos = tablaSimbolos.get(lexema);
-            atributos.put("despl", despl);
-            tablaSimbolos.put(lexema, atributos);
+        EntradaTS e = tablaSimbolos.buscar(funcionActual, lexema);
+        if (e == null) {
+            e = new EntradaTS();
+            tablaSimbolos.insertar(funcionActual, lexema, e);
         }
+        e.put("despl", despl);
     }
 
     /**
      * Busca el desplazamiento de un identificador
      */
     public int buscaDesplTS(String lexema) {
-        if (!tablaSimbolos.containsKey(lexema)) {
-            throw new RuntimeException("Error semántico: Variable '" + lexema +
-                    "' no declarada en la línea " + lexico.getLinea());
+        EntradaTS e = tablaSimbolos.buscar(funcionActual, lexema);
+        if (e == null) {
+            throw new RuntimeException("Error semántico: Variable '" + lexema + "' no declarada en la línea " + lexico.getLinea());
         }
 
-        Map<String, Object> atributos = tablaSimbolos.get(lexema);
-        Integer despl = (Integer) atributos.get("despl");
+        Integer despl = (Integer) e.get("despl");
 
         if (despl == null) {
             throw new RuntimeException("Error semántico: Variable '" + lexema +
@@ -95,19 +91,11 @@ public class AnSemantico {
     // ==================== FUNCIONES SEMÁNTICAS ESPECÍFICAS ====================
 
     public void validarDeclaracion(String lexema, String tipo) {
-        if (tablaSimbolos.containsKey(lexema)) {
-            Map<String, Object> atributos = tablaSimbolos.get(lexema);
-            String tipoExistente = (String) atributos.get("tipo");
-            String categoriaExistente = (String) atributos.get("categoria");
-
-            // ✅ Solo error si ya está semánticamente declarada
-            if (tipoExistente != null && categoriaExistente != null) {
-                throw new RuntimeException("Error semántico: Variable '" + lexema +
-                        "' ya declarada en la línea " + lexico.getLinea());
-            }
+        EntradaTS e = tablaSimbolos.buscar(funcionActual, lexema);
+        if (e != null && e.get("tipo") != null && e.get("categoria") != null) {
+            throw new RuntimeException("Error semántico: Variable '" + lexema + "' ya declarada en la línea " + lexico.getLinea());
         }
 
-        // Añadir tipo y categoría
         anadeTipoTS(lexema, tipo);
         anadeCategoriaTS(lexema, "variable");
     }
@@ -172,52 +160,43 @@ public class AnSemantico {
      * Añade categoría a un identificador (variable, funcion, etc.)
      */
     public void anadeCategoriaTS(String lexema, String categoria) {
-        if (!tablaSimbolos.containsKey(lexema)) {
-            Map<String, Object> atributos = new HashMap<>();
-            atributos.put("categoria", categoria);
-            tablaSimbolos.put(lexema, atributos);
-        } else {
-            Map<String, Object> atributos = tablaSimbolos.get(lexema);
-            atributos.put("categoria", categoria);
-            tablaSimbolos.put(lexema, atributos);
+        EntradaTS e = tablaSimbolos.buscar(funcionActual, lexema);
+        if (e == null) {
+            e = new EntradaTS();
+            tablaSimbolos.insertar(funcionActual, lexema, e);
         }
+        e.put("categoria", categoria);
     }
 
     /**
      * Añade información de función a la tabla de símbolos (regla F → function H id (A) {C})
      */
     public void validarDeclaracionFuncion(String lexema, String tipoRetorno, int numParam) {
-        // Verificar si ya está declarada
-        if (tablaSimbolos.containsKey(lexema)) {
-            Map<String, Object> atributos = tablaSimbolos.get(lexema);
-            String tipoExistente = (String) atributos.get("tipo");
-            if (tipoExistente != null) {
-                throw new RuntimeException("Error semántico: Función '" + lexema +
-                        "' ya declarada en la línea " + lexico.getLinea());
-            }
+        EntradaTS e = tablaSimbolos.buscar(null, lexema);
+        if (e != null && e.get("tipo") != null) {
+            throw new RuntimeException("Error semántico: Función '" + lexema + "' ya declarada en la línea " + lexico.getLinea());
         }
 
-        anadeTipoTS(lexema, "funcion");
-        anadeCategoriaTS(lexema, "funcion");
-
-        Map<String, Object> atributos = tablaSimbolos.get(lexema);
-        atributos.put("TipoRetorno", tipoRetorno);
-        atributos.put("numParam", numParam);
-        tablaSimbolos.put(lexema, atributos);
+        if (e == null) {
+            e = new EntradaTS();
+            tablaSimbolos.insertar(null, lexema, e);
+        }
+        e.put("tipo", "funcion");
+        e.put("categoria", "funcion");
+        e.put("TipoRetorno", tipoRetorno);
+        e.put("numParam", numParam);
     }
 
     /**
      * Añade tipo de parámetro a una función
      */
     public void anadeTipoParamTS(String lexema, int numeroParam, String tipoParam) {
-        if (!tablaSimbolos.containsKey(lexema)) {
-            throw new RuntimeException("Error semántico: Función '" + lexema +
-                    "' no declarada en la línea " + lexico.getLinea());
+        EntradaTS e = tablaSimbolos.buscar(null, lexema);
+        if (e == null) {
+            throw new RuntimeException("Error semántico: Función '" + lexema + "' no declarada en la línea " + lexico.getLinea());
         }
 
-        Map<String, Object> atributos = tablaSimbolos.get(lexema);
-        atributos.put("TipoParam" + String.format("%02d", numeroParam), tipoParam);
-        tablaSimbolos.put(lexema, atributos);
+        e.put("TipoParam" + String.format("%02d", numeroParam), tipoParam);
     }
 
     // ==================== FUNCIONES AUXILIARES ====================
@@ -250,7 +229,7 @@ public class AnSemantico {
      * Obtiene el lexema de un token id usando su desplazamiento
      */
     public String obtenerLexemaPorDespl(int desplazamiento) {
-        for (Map.Entry<String, Map<String, Object>> entrada : tablaSimbolos.entrySet()) {
+        for (Map.Entry<String, Map<String, Object>> entrada : tablaLexico.entrySet()) {
             String lexema = entrada.getKey();
             Map<String, Object> atributos = entrada.getValue();
             Integer despl = (Integer) atributos.get("despl");
@@ -265,8 +244,30 @@ public class AnSemantico {
 
     // ==================== GETTERS PARA DEBUGGING ====================
 
-    public Map<String, Map<String, Object>> getTablaSimbolos() {
+    public TablaSimbolos getTablaSimbolos() {
         return tablaSimbolos;
+    }
+
+    public void iniciarFuncion(String nombre) {
+        funcionActual = nombre;
+        tablaSimbolos.crearLocal(nombre);
+    }
+
+    public void finalizarFuncion() {
+        if (funcionActual != null) {
+            dumpLocales.append(tablaSimbolos.dumpLocal(funcionActual));
+            tablaSimbolos.eliminarLocal(funcionActual);
+            funcionActual = null;
+        }
+    }
+
+    public void volcarTablas(String archivo) {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(archivo))) {
+            bw.write(tablaSimbolos.dump());
+            bw.write(dumpLocales.toString());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public AnLexico getLexico() {
